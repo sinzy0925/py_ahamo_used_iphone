@@ -207,9 +207,8 @@ def main() -> int:
             f"<p>{reload_btn} {workflow_btn}</p>"
         )
         note_block = """  <p class="note">
-    <strong>表示を更新</strong> はこのページだけ再読み込みします。<strong>スクショの再取得を依頼</strong> は別タブで Google Apps Script に接続し、
-    （トークンと間隔チェックが通れば）このリポジトリの GitHub Actions を起動します。同じ処理は<strong>およそ 10 分に 1 回まで</strong>に制限しています。
-    トークン付き URL はページの HTML に埋め込まれるため、「URL を共有した時点である程度は再現されます」ので、問題があれば GAS と GitHub の両方でトークンを更新してください。
+    <strong>表示を更新</strong> はこのページだけ再読み込みします。<strong>スクショの再取得を依頼</strong> は別タブで ahamo のサイトのリユース品一覧ページのスクショを取得します。
+    取得が始まったら、およそ数分〜5分ほどで反映されます（キューにより前後します）。しばらくしてから <strong>表示を更新</strong> を押すと、スクショと在庫表が最新になります。
   </p>
 """
         script_handlers = """  <script>
