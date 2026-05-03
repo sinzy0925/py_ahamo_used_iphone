@@ -1,5 +1,13 @@
 # py_ahamo_used_iphone
 
+ワークフローで取得している **ahamo の「リユース品の選択」画面のスクショ** と取得日時は、次の **GitHub Pages** からブラウザで確認できます。
+
+[https://sinzy0925.github.io/py_ahamo_used_iphone/](https://sinzy0925.github.io/py_ahamo_used_iphone/)
+
+自分の環境では表示が異なることがあるため、公開 URL はリポジトリの **Settings → Pages** で確かめてください。
+
+---
+
 ## 必須メンテナンス：GITHUB_TOKEN の期限とローテーション
 
 Google Apps Script（GAS）のスクリプトプロパティ **`GITHUB_TOKEN`** には、Fine-grained 個人アクセストークン（多くが `github_pat_` で始まる値）を入れています。**期限付きのトークンは必ず失効します。** 期限を「無期限」にしない限りいつか切れるので、運用として **期限前にローテーションする義務がある** と考えるのがよいです。無期限にしていても、漏えいや権限変更のときはあらためて発行します。
