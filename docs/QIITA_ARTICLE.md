@@ -24,7 +24,7 @@ private: false
 
 - **公開ページ**: [https://sinzy0925.github.io/py_ahamo_used_iphone/](https://sinzy0925.github.io/py_ahamo_used_iphone/)
 
-画面上では、スクショのほか機種ごとの在庫状況のまとめ（表形式）も表示される想定です（ビルド内容に準じます）。
+画面上では、スクショのほか機種ごとの在庫状況のまとめ（表形式）も表示されます。
 
 ### しくみについて（正直に）
 
