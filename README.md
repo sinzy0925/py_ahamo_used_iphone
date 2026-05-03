@@ -91,4 +91,8 @@ python -m venv .venv
 | `gas/Code.gs` | GAS 用ソース（プロジェクトへコピー） |
 | `.github/workflows/ahamo-screenshot-pages.yml` | CI / Pages |
 
-ライセンス表記は別途、この README で足りない点は追記して構いません。
+---
+
+## ライセンス
+
+このリポジトリのソースコードは **[MIT License](LICENSE)** で公開されています。
