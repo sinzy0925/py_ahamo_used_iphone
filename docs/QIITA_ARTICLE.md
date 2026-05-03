@@ -1,5 +1,5 @@
 ---
-title: 2年後返却プランではなくあえて購入？ahamo で中古 iPhone が安くなるときの話（在庫は GitHub Actions で 1時間ごとにチェック公開）
+title: 2年後返却プランではなくあえて購入？ahamo で中古 iPhone が安くなるときの話（在庫は GitHub Actions でおよそ30分ごとにチェック公開）
 tags:
   - ahamo
   - GitHub Pages
@@ -20,7 +20,7 @@ private: false
 
 ## 在庫を手で見張らなくていいサイトを公開しました
 
-そこで、**およそ 1 時間ごとに**自動でサイトを更新して、現在の一覧の状態をチェックできる **GitHub Pages のページ** を作り公開しています。**無料・ブラウザからそのまま閲覧**できます。
+そこで、**およそ 30 分ごとに**自動でサイトを更新して、現在の一覧の状態をチェックできる **GitHub Pages のページ** を作り公開しています。**無料・ブラウザからそのまま閲覧**できます。
 
 - **公開ページ**: [https://sinzy0925.github.io/py_ahamo_used_iphone/](https://sinzy0925.github.io/py_ahamo_used_iphone/)
 

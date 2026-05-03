@@ -46,7 +46,7 @@ Playwright で ahamo の申込〜リユース品選択ページまで自動操�
 |-----------|------|
 | **main.py** | Playwright で申込タイプ〜「リユース品を見る」まで自動操作。**used_term_select_full.png** にページ全体スクショ。`--user-agent` で Stable 最新 UA、`--chrome-channel` など。CI では `python main.py --user-agent --headless`。 |
 | **build_site.py** | PNG と **取得日時（JST）** から **`site/`**（`index.html` + PNG）を出力。環境変数 **`GAS_TRIGGER_URL`** が空でないと **「表示を更新」** と **「スクショの再取得を依頼」** の 2 ボタンになる。ログに `build_site: GAS_TRIGGER_URL …` と出る。 |
-| **`.github/workflows/ahamo-screenshot-pages.yml`** | `pip` → Chromium インストール → **main.py** → **build_site.py**（`secrets.GAS_TRIGGER_URL` を `env` で渡す）→ **upload-pages-artifact** → **deploy-pages**。cron は毎時 0 分 UTC、あわせて **`workflow_dispatch`（手動）** あり。 |
+| **`.github/workflows/ahamo-screenshot-pages.yml`** | `pip` → Chromium インストール → **main.py** → **build_site.py**（`secrets.GAS_TRIGGER_URL` を `env` で渡す）→ **upload-pages-artifact** → **deploy-pages**。cron は **30分ごと**（UTC の毎時 0・30分）、あわせて **`workflow_dispatch`（手動）** あり。 |
 | **gas/Code.gs**（GAS に貼る） | クエリ **`token`** が **`WEBHOOK_TOKEN`** と一致したときだけ、スクリプトプロパティの **`GITHUB_TOKEN`** で GitHub の **`workflow_dispatch`** API を呼ぶ。**過去実行から 10 分以内**は拒否。**`LockService`** で並行ヒット時の競合を抑える。 |
 | **GitHub Secret `GAS_TRIGGER_URL`** | GAS の **デプロイ済みウェブアプリの実行 URL に `token=WEBHOOK_TOKEN` を付けた 1 行**。ビルドで HTML に埋め込むため **閲覧者はソースにトークン付き URL を見られる** が、GitHub PAT 自体は含めない。 |
 | **GITHUB_PAGES_SETUP.md** | Pages の Source を **GitHub Actions** にする、`deploy-pages` の 404 対処など。 |
