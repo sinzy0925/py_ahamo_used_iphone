@@ -33,3 +33,7 @@ Error: HttpError: Not Found … Ensure GitHub Pages has been enabled
 ## 参考（公式）
 
 - [Publishing with a custom GitHub Actions workflow](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site#publishing-with-a-custom-github-actions-workflow)
+
+## ページから Actions を起動する場合
+
+Google Apps Script 経由で `workflow_dispatch` する手順は **`docs/GAS_TRIGGER_SETUP.md`** を参照してください。
