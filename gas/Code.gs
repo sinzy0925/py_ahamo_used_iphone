@@ -7,6 +7,7 @@
  *   WORKFLOW_FILE    … ワークフローYAMLのファイル名（例 ahamo-screenshot-pages.yml）
  *   WEBHOOK_TOKEN    … Pages に埋める URL と同じクエリ token= の値と一致させる
  *   GIT_REF          … 省略時 main（ワークフロー dispatch の ref）
+ *   PUBLIC_PAGES_URL …（省略可）成功時メッセージに出すサイト URL（既定は sinzy0925 の Pages）
  *
  * 【デプロイ】デプロイ → 新しいデプロイ → 種類:ウェブアプリ
  *   次のユーザーとして実行: 自分
@@ -14,6 +15,14 @@
  */
 
 var COOLDOWN_MS = 10 * 60 * 1000;
+
+function publicPagesUrl_(props) {
+  var u = props.getProperty('PUBLIC_PAGES_URL');
+  if (u && String(u).trim()) {
+    return String(u).trim();
+  }
+  return 'https://sinzy0925.github.io/py_ahamo_used_iphone/';
+}
 
 function doGet(e) {
   return handleRequest_(e);
@@ -49,14 +58,19 @@ function handleRequest_(e) {
     if (last && !isNaN(last) && (now - last) < COOLDOWN_MS) {
       var waitMs = COOLDOWN_MS - (now - last);
       var waitMin = Math.max(1, Math.ceil(waitMs / 60000));
-      return textOut_(
-        'Cooldown: wait about ' +
-          waitMin +
-          ' min (last dispatched at script time ' +
-          new Date(last).toISOString() +
-          ')',
-        429
+      var lastJstStr = Utilities.formatDate(
+        new Date(last),
+        'Asia/Tokyo',
+        'yyyy-MM-dd HH:mm:ss'
       );
+      var cooldownMsg =
+        '１０分間クールダウン中：約' +
+        waitMin +
+        '分で実行可能になります。\n' +
+        '（前回実行日時：' +
+        lastJstStr +
+        ' JST）';
+      return textOut_(cooldownMsg, 429);
     }
 
     var result = dispatchGitHub_(props);
@@ -65,10 +79,17 @@ function handleRequest_(e) {
     }
 
     props.setProperty('LAST_DISPATCH_MS', String(now));
-    return textOut_(
-      'OK: workflow dispatched. Ref=' + (props.getProperty('GIT_REF') || 'main'),
-      200
-    );
+    var gitRef = props.getProperty('GIT_REF') || 'main';
+    var site = publicPagesUrl_(props);
+    var okMsg =
+      'OK: workflow dispatched. Ref=' +
+      gitRef +
+      '\n\n' +
+      '現在、リユース品の選択画面のスクショを取得中です。\n' +
+      '２分程度お待ちの上、再度以下のURLを開いてください。\n\n' +
+      'リンク\n' +
+      site;
+    return textOut_(okMsg, 200);
   } finally {
     try {
       lock.releaseLock();

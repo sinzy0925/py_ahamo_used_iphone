@@ -18,6 +18,7 @@
 | `WORKFLOW_FILE` | ワークフロー YAML の**ファイル名**（例 `ahamo-screenshot-pages.yml`。`.github/workflows/` は含めません） |
 | `WEBHOOK_TOKEN` | **長くランダムな文字列**（例 32〜64 文字の英数字）。後で Pages 用シークレットと一致させます。 |
 | `GIT_REF` | （省略可）`workflow_dispatch` のブランチ。省略時は GAS 内で `main` を使用。**既定ブランチが `main` でないときは必須**。 |
+| `PUBLIC_PAGES_URL` | （省略可）成功時レスポンスに表示するサイト URL。**省略時は** `https://sinzy0925.github.io/py_ahamo_used_iphone/` が使われます。自分の Pages に合わせて設定してください。 |
 
 Classic PAT を使う場合は **`workflow` スコープ**が必要になります。
 
@@ -41,7 +42,7 @@ https://script.google.com/macros/s/......./exec?token=【WEBHOOK_TOKENと同一�
 期待される応答:
 
 - 初回: `OK: workflow dispatched...`
-- **10 分以内に再度**: `Cooldown: ...`
+- **10 分以内に再度**: 「１０分間クールダウン中：約◯分で…（前回実行日時：… JST）」のような文言
 - **`token` 不一致または未指定**: `Forbidden`
 
 ※ 画面上は HTTP 200 のままで本文のみ変わる場合がありますが、問題ありません。
@@ -75,5 +76,5 @@ https://script.google.com/macros/s/......./exec?token=【WEBHOOK_TOKENと同一�
 
 - **`GitHub API error: HTTP 404`**: `GITHUB_REPO`／`WORKFLOW_FILE`／`GIT_REF`（ブランチ名）が正しいか確認。workflow ファイル名だけで API が通らないときは、[Workflows API で ID を確認](https://docs.github.com/en/rest/actions/workflows)して数値 ID を `WORKFLOW_FILE` に入れる試しもできます。
 - **`403 Forbidden`**: Fine-grained PAT の対象リポジトリと権限が合っているか。
-- **すぐ Cooldown**: 直前に成功済み。**10 分後**か、GAS の `LAST_DISPATCH_MS` を削除（プロパティを消してリセット）は開発時のみ。
+- **すぐクールダウン文言**: 直前に成功済み。**10 分後**か、GAS の `LAST_DISPATCH_MS` を削除（プロパティを消してリセット）は開発時のみ。
 - **`Forbidden` と GAS が出る**: `token=` が Script Properties の `WEBHOOK_TOKEN` と一致しているか、`GAS_TRIGGER_URL` のシークレットに誤りがないか確認。
