@@ -1,0 +1,50 @@
+iPhone 16 Pro、ランク：A+、在庫なし
+iPhone 16 Pro、ランク：A、在庫なし
+iPhone 16 Pro、ランク：B、在庫なし
+iPhone 16、ランク：A+、在庫なし
+iPhone 16、ランク：A、在庫なし
+iPhone 16、ランク：B、在庫なし
+iPhone 15 Pro、ランク：A+、在庫あり
+iPhone 15 Pro、ランク：A、在庫あり
+iPhone 15 Pro、ランク：B、在庫あり
+iPhone 15 Pro Max、ランク：A+、在庫あり
+iPhone 15 Pro Max、ランク：A、在庫あり
+iPhone 15 Pro Max、ランク：B、在庫あり
+iPhone 15、ランク：A+、在庫あり
+iPhone 15、ランク：A、在庫あり
+iPhone 15、ランク：B、在庫あり
+iPhone 15 Plus、ランク：A+、在庫あり
+iPhone 15 Plus、ランク：A、在庫あり
+iPhone 15 Plus、ランク：B、在庫あり
+iPhone 14 Pro、ランク：A+、在庫なし
+iPhone 14 Pro、ランク：A、在庫あり
+iPhone 14 Pro、ランク：B、在庫あり
+iPhone 14 Pro Max、ランク：A+、在庫なし
+iPhone 14 Pro Max、ランク：A、在庫なし
+iPhone 14 Pro Max、ランク：B、在庫なし
+iPhone 14、ランク：A+、在庫あり
+iPhone 14、ランク：A、在庫あり
+iPhone 14、ランク：B、在庫あり
+iPhone 14 Plus、ランク：A、在庫なし
+iPhone SE（第3世代）、ランク：A+、在庫なし
+iPhone SE（第3世代）、ランク：A、在庫あり
+iPhone SE（第3世代）、ランク：B、在庫あり
+iPhone 13 Pro、ランク：A+、在庫なし
+iPhone 13 Pro、ランク：A、在庫あり
+iPhone 13 Pro、ランク：B、在庫あり
+iPhone 13 Pro Max、ランク：A+、在庫なし
+iPhone 13 Pro Max、ランク：A、在庫なし
+iPhone 13 Pro Max、ランク：B、在庫あり
+iPhone 13、ランク：A+、在庫あり
+iPhone 13、ランク：A、在庫あり
+iPhone 13、ランク：B、在庫あり
+iPhone 13 mini、ランク：A+、在庫なし
+iPhone 13 mini、ランク：A、在庫なし
+iPhone 13 mini、ランク：B、在庫なし
+iPhone 12、ランク：B、在庫なし
+iPhone 11、ランク：A+、在庫なし
+iPhone 11、ランク：A、在庫なし
+iPhone 11、ランク：B、在庫なし
+iPhone SE(第2世代)、ランク：A+、在庫あり
+iPhone SE(第2世代)、ランク：A、在庫あり
+iPhone SE(第2世代)、ランク：B、在庫あり

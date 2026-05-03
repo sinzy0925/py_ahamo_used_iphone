@@ -11,7 +11,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import Page, sync_playwright
 
 USED_PRODUCTS_URL = "https://ahamo.com/products/used/"
 # リユース品一覧ページの「申し込み」ボタン
@@ -47,6 +47,7 @@ VIEW_REUSED_SELECTOR = (
     '[href="/store/pub/application/terminal/used-term-select.html"]'
 )
 USED_TERM_SCREENSHOT_DEFAULT = Path(__file__).resolve().parent / "used_term_select_full.png"
+USED_TERM_INVENTORY_LINES_DEFAULT = Path(__file__).resolve().parent / "used_term_inventory_lines.txt"
 
 # Windows + Chrome とみなさせる既定 UA（古い UA だとサイトが別レイアウトにすることがある）
 DEFAULT_USER_AGENT = (
@@ -104,6 +105,57 @@ def _resolve_user_agent(cli_value: str | None) -> str:
     return stripped if stripped else DEFAULT_USER_AGENT
 
 
+def scrape_used_term_inventory_summary(page: Page, *, timeout_ms: float) -> list[str]:
+    """m-phone-thumbnail-card 単位で【機種】【ランク】【在庫】の一覧行を組み立てる。"""
+    to = int(timeout_ms)
+    lines: list[str] = []
+
+    cards = page.locator("div.m-phone-thumbnail-card")
+    count = cards.count()
+    if count == 0:
+        print("[在庫一覧] div.m-phone-thumbnail-card が 0 件です", file=sys.stderr)
+        return lines
+
+    for i in range(count):
+        c = cards.nth(i)
+        title = (
+            c.locator("span.m-phone-thumbnail-card__title").first.inner_text(timeout=to).strip()
+        )
+        rank_txt = ""
+        rank_loc = c.locator("span.m-phone-thumbnail-card__rank")
+        if rank_loc.count() > 0:
+            rank_txt = rank_loc.first.inner_text(timeout=to).strip()
+        rank_part = f"ランク：{rank_txt}" if rank_txt else "ランク：（表示なし）"
+
+        footer = c.locator(".m-phone-thumbnail-card__footer")
+        footer_text = ""
+        label_loc = footer.locator(".a-button__label")
+        if label_loc.count() > 0:
+            footer_text = label_loc.first.inner_text(timeout=to).strip()
+
+        btn_disabled = footer.locator("a.a-button--disabled").count() > 0
+
+        shipping_tag = c.locator(".m-phone-thumbnail-card__shipping .a-tag")
+        shipping_hint = ""
+        if shipping_tag.count() > 0:
+            shipping_hint = shipping_tag.first.inner_text(timeout=to).strip()
+
+        if footer_text == "在庫なし" or btn_disabled:
+            stock = "在庫なし"
+        elif "スマホを選ぶ" in footer_text:
+            stock = "在庫あり"
+        elif "在庫なし" in shipping_hint:
+            stock = "在庫なし"
+        elif footer_text:
+            stock = footer_text
+        else:
+            stock = "不明"
+
+        lines.append(f"{title}、{rank_part}、{stock}")
+
+    return lines
+
+
 def _ensure_utf8_stdout() -> None:
     if hasattr(sys.stdout, "reconfigure"):
         try:
@@ -136,6 +188,13 @@ def main() -> int:
             "「リユース品の選択」ページの全体スクショをPNGで保存するパス。"
             " 省略時は main.py と同じフォルダへ used_term_select_full.png を書き込みます"
         ),
+    )
+    parser.add_argument(
+        "--inventory-lines-file",
+        type=Path,
+        default=USED_TERM_INVENTORY_LINES_DEFAULT,
+        metavar="PATH",
+        help="機種×ランク×在庫のサマリー行テキスト（build_site が HTML に読み込み）を書き込むパス",
     )
     parser.add_argument(
         "--timeout",
@@ -251,9 +310,24 @@ def main() -> int:
 
             print(f"[リユース品を見る後] title: {page.title()}")
             print(f"[リユース品を見る後] url: {page.url}")
-            print(f"[ここでスクショを撮る]")
 
             page.wait_for_timeout(2000)
+            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            page.wait_for_timeout(700)
+            page.evaluate("window.scrollTo(0, 0)")
+            page.wait_for_timeout(400)
+
+            inv_lines = scrape_used_term_inventory_summary(page, timeout_ms=args.timeout)
+            args.inventory_lines_file.parent.mkdir(parents=True, exist_ok=True)
+            args.inventory_lines_file.write_text(
+                "\n".join(inv_lines) + ("\n" if inv_lines else ""),
+                encoding="utf-8",
+            )
+            print(f"[在庫一覧] {len(inv_lines)} 件 → {args.inventory_lines_file.resolve()}")
+            for line in inv_lines:
+                print(f"    {line}")
+
+            print("[ここでスクショを撮る]")
 
             args.screenshot.parent.mkdir(parents=True, exist_ok=True)
             page.screenshot(path=str(args.screenshot), full_page=True)
