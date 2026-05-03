@@ -1,5 +1,5 @@
-# GitHub Pages の「Build and deployment」で Source を「GitHub Actions」にしてください。
-# https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site#publishing-with-a-custom-github-actions-workflow
+# GitHub Pages が 404 で失敗する場合:
+# Repository → Settings → Pages → Source で「GitHub Actions」を選ぶこと（詳細は GITHUB_PAGES_SETUP.md）
 name: ahamo screenshot → GitHub Pages
 
 on:
@@ -8,6 +8,7 @@ on:
     - cron: "0 * * * *"
   workflow_dispatch:
 
+# checkout と Pages アーティファクトのアップロード用。詳細は GITHUB_PAGES_SETUP.md
 permissions:
   contents: read
   pages: write
@@ -47,6 +48,10 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    # deploy-pages が要求する権限（ジョブ単位での指定が推奨）
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
