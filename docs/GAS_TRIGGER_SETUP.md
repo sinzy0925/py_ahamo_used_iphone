@@ -72,6 +72,20 @@ https://script.google.com/macros/s/......./exec?token=【WEBHOOK_TOKENと同一�
 | **スクショの再取得を依頼** | `GAS_TRIGGER_URL` を**新しいタブ**で開く（実行結果はそのタブのテキストで表示）。**Secret 未設定時は表示されません。** |
 | **表示を更新** | 現在のサイトをクエリ付きで再読み込み（キャッシュの切り離し）。常にあります。
 
+## GAS エディタから手動でワークフローを叩く場合
+
+コードに **`runWorkflowFromEditor`** があります。**関数一覧でこれを選び ▶ を押す**と、`WEBHOOK_TOKEN` は不要ですが、`GITHUB_TOKEN` などのスクリプトプロパティはウェブ経由と同じく必要です。**10 分クールダウン**も同様に適用されます。ログ（表示 → ログ）に `OK: workflow dispatched` が出れば GitHub に dispatch 済みです。
+
+## 約30分ごとに GAS から自動実行する場合
+
+GAS が許す間隔 **`everyMinutes(30)`** で、およそ **30 分おき**に `runWorkflowFromEditorScheduled` が動きます（**初回はトリガー作成時刻から 30 分刻み**。きっちり :00/:30 とは限りません）。
+
+- **登録:** エディタから **`installTriggerEvery30Minutes`** を **1 回だけ**実行する。
+- **解除:** **`uninstallTriggerEvery30Minutes`** を実行する。
+- **`installTriggerEvery20Minutes`／`uninstallTriggerEvery20Minutes`** は名前のまま残していますが **非推奨**です。実行すると **`Every30Minutes` と同等**の処理になります（ログに注意が出ます）。
+
+**GitHub Actions の定期実行とも二重**になるので、どちらかに寄せるのが無難です。**10 分クールダウン**は共通のため、30 分間隔でも問題になりにくいです。
+
 ## トラブルシュート
 
 - **`GitHub API error: HTTP 404`**: `GITHUB_REPO`／`WORKFLOW_FILE`／`GIT_REF`（ブランチ名）が正しいか確認。workflow ファイル名だけで API が通らないときは、[Workflows API で ID を確認](https://docs.github.com/en/rest/actions/workflows)して数値 ID を `WORKFLOW_FILE` に入れる試しもできます。
