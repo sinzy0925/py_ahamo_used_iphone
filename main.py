@@ -1,5 +1,8 @@
 """
-ahamo.com リユース製品一覧ページへ Playwright でアクセスするCLI。
+ahamo.com 製品ページへ Playwright でアクセスするCLI。
+
+- used: リユース製品一覧から申込フローへ進み、リユース端末選択ページをスクレイプ
+- new-iphone: 新品 iPhone 紹介ページから同様の申込フローへ進み、新品 iPhone 一覧の在庫フラグを取得
 """
 
 from __future__ import annotations
@@ -14,6 +17,10 @@ from pathlib import Path
 from playwright.sync_api import Page, sync_playwright
 
 USED_PRODUCTS_URL = "https://ahamo.com/products/used/"
+NEW_IPHONE_PRODUCTS_URL = "https://ahamo.com/products/iphone/"
+# 申込導線の各画面遷移後の待機（ミリ秒）— new-iphone フロー用
+NEW_FLOW_NAV_POST_WAIT_MS = 2000
+NEW_FLOW_START_WAIT_MS = 2000
 # リユース品一覧ページの「申し込み」ボタン
 APPLY_SELECTOR = (
     'a.a-button.a-button--primary[href="/store/pub/application/type/"]'
@@ -48,6 +55,8 @@ VIEW_REUSED_SELECTOR = (
 )
 USED_TERM_SCREENSHOT_DEFAULT = Path(__file__).resolve().parent / "used_term_select_full.png"
 USED_TERM_INVENTORY_LINES_DEFAULT = Path(__file__).resolve().parent / "used_term_inventory_lines.txt"
+NEW_IPHONE_LIST_SCREENSHOT_DEFAULT = Path(__file__).resolve().parent / "new_iphone_list_full.png"
+NEW_IPHONE_INVENTORY_LINES_DEFAULT = Path(__file__).resolve().parent / "new_iphone_inventory_lines.txt"
 
 # Windows + Chrome とみなさせる既定 UA（古い UA だとサイトが別レイアウトにすることがある）
 DEFAULT_USER_AGENT = (
@@ -156,6 +165,127 @@ def scrape_used_term_inventory_summary(page: Page, *, timeout_ms: float) -> list
     return lines
 
 
+def _stock_label_from_sale_flags(
+    flag_str: str | None,
+    variants_str: str | None,
+) -> str:
+    """data-sale-stock-flag / variants から在庫ラベル（1・2=あり、3=なし）。"""
+    if variants_str:
+        parts = [p.strip() for p in variants_str.split(",") if p.strip()]
+        if parts:
+            if all(p == "3" for p in parts):
+                return "在庫なし"
+            if any(p in ("1", "2") for p in parts):
+                return "在庫あり"
+    if flag_str == "3":
+        return "在庫なし"
+    if flag_str in ("1", "2"):
+        return "在庫あり"
+    return "不明"
+
+
+def scrape_new_iphone_product_list_inventory(page: Page, *, timeout_ms: float) -> list[str]:
+    """m-product-card-list のカード単位で機種名と在庫を一覧化する。"""
+    to = int(timeout_ms)
+    lines: list[str] = []
+
+    wrappers = page.locator("div.m-product-card-list__item-wrapper")
+    count = wrappers.count()
+    if count == 0:
+        print(
+            "[新品iPhone一覧] div.m-product-card-list__item-wrapper が 0 件です",
+            file=sys.stderr,
+        )
+        return lines
+
+    for i in range(count):
+        w = wrappers.nth(i)
+        flag = w.get_attribute("data-sale-stock-flag")
+        variants = w.get_attribute("data-sale-stock-flag-variants")
+        name_loc = w.locator("p.m-product-card-list__name").first
+        name = name_loc.inner_text(timeout=to).strip()
+        stock = _stock_label_from_sale_flags(flag, variants)
+        lines.append(f"{name} {stock}")
+
+    return lines
+
+
+def _apply_link_and_contract_wizard(
+    page: Page,
+    *,
+    timeout_ms: float,
+    pre_apply_wait_ms: int = 0,
+    phone_option_delay_ms: int = 0,
+    post_navigation_wait_ms: int = 0,
+) -> None:
+    """製品ページの「申し込み」から iPhone カテゴリカード Click まで（共通）。"""
+    to = float(timeout_ms)
+    if pre_apply_wait_ms:
+        page.wait_for_timeout(pre_apply_wait_ms)
+
+    apply_link = page.locator(APPLY_SELECTOR)
+    apply_link.wait_for(state="visible", timeout=to)
+    apply_link.click(timeout=to)
+    page.wait_for_load_state("domcontentloaded", timeout=to)
+    if post_navigation_wait_ms:
+        page.wait_for_timeout(post_navigation_wait_ms)
+
+    print(f"[申込画面] title: {page.title()}")
+    print(f"[申込画面] url: {page.url}")
+
+    phone_radio = page.locator(".a-radio__body").filter(has_text=KEEP_PHONE_LABEL)
+    phone_radio.wait_for(state="visible", timeout=to)
+    if phone_option_delay_ms:
+        page.wait_for_timeout(phone_option_delay_ms)
+    phone_radio.click(timeout=to)
+
+    print(f"[電話番号の使い方] 「{KEEP_PHONE_LABEL}」を選択しました")
+
+    non_docomo = page.locator(NON_DOCOMO_CONTRACT_LABEL_SELECTOR)
+    non_docomo.wait_for(state="visible", timeout=to)
+    non_docomo.click(timeout=to)
+
+    print('[契約タイプ] 「docomo以外」を選択しました')
+
+    buy_terminal = page.locator(TERMINAL_BUY_LABEL_SELECTOR)
+    buy_terminal.wait_for(state="visible", timeout=to)
+    buy_terminal.click(timeout=to)
+
+    print('[端末] 「買う」を選択しました')
+
+    next_btn = page.locator(NEXT_STEP_BUTTON_SELECTOR).filter(has_text="次へ")
+    next_btn.wait_for(state="visible", timeout=to)
+    next_btn.click(timeout=to)
+    page.wait_for_load_state("domcontentloaded", timeout=to)
+    if post_navigation_wait_ms:
+        page.wait_for_timeout(post_navigation_wait_ms)
+
+    print(f"[次へ後] title: {page.title()}")
+    print(f"[次へ後] url: {page.url}")
+
+    ready_ok = page.locator(READY_OK_SELECTOR).filter(has_text="準備OK")
+    ready_ok.scroll_into_view_if_needed(timeout=to)
+    ready_ok.wait_for(state="visible", timeout=to)
+    ready_ok.click(timeout=to)
+    page.wait_for_load_state("domcontentloaded", timeout=to)
+    if post_navigation_wait_ms:
+        page.wait_for_timeout(post_navigation_wait_ms)
+
+    print(f"[準備OK後] title: {page.title()}")
+    print(f"[準備OK後] url: {page.url}")
+
+    iphone_card = page.locator(IPHONE_TERMINAL_SELECTOR)
+    iphone_card.scroll_into_view_if_needed(timeout=to)
+    iphone_card.wait_for(state="visible", timeout=to)
+    iphone_card.click(timeout=to)
+    page.wait_for_load_state("domcontentloaded", timeout=to)
+    if post_navigation_wait_ms:
+        page.wait_for_timeout(post_navigation_wait_ms)
+
+    print(f"[iPhone選択後] title: {page.title()}")
+    print(f"[iPhone選択後] url: {page.url}")
+
+
 def _ensure_utf8_stdout() -> None:
     if hasattr(sys.stdout, "reconfigure"):
         try:
@@ -166,7 +296,18 @@ def _ensure_utf8_stdout() -> None:
 
 def main() -> int:
     _ensure_utf8_stdout()
-    parser = argparse.ArgumentParser(description="Playwright で ahamo リユース製品一覧を開く")
+    parser = argparse.ArgumentParser(
+        description="Playwright で ahamo 製品ページから申込フローを開き在庫を取得します"
+    )
+    parser.add_argument(
+        "--flow",
+        choices=("used", "new-iphone"),
+        default="used",
+        help=(
+            "used: リユース一覧からリユース端末選択まで。"
+            " new-iphone: 新品iPhone紹介ページから新品iPhone一覧（data-sale-stock-flag）まで"
+        ),
+    )
     parser.add_argument(
         "--headless",
         action="store_true",
@@ -182,19 +323,22 @@ def main() -> int:
     parser.add_argument(
         "--screenshot",
         type=Path,
-        default=USED_TERM_SCREENSHOT_DEFAULT,
+        default=None,
         metavar="PATH",
         help=(
-            "「リユース品の選択」ページの全体スクショをPNGで保存するパス。"
-            " 省略時は main.py と同じフォルダへ used_term_select_full.png を書き込みます"
+            "ページ全体スクショのPNGパス。"
+            " 省略時はフローに応じて used_term_select_full.png または new_iphone_list_full.png"
         ),
     )
     parser.add_argument(
         "--inventory-lines-file",
         type=Path,
-        default=USED_TERM_INVENTORY_LINES_DEFAULT,
+        default=None,
         metavar="PATH",
-        help="機種×ランク×在庫のサマリー行テキスト（build_site が HTML に読み込み）を書き込むパス",
+        help=(
+            "在庫サマリー行テキストの出力パス。"
+            " 省略時は used_term_inventory_lines.txt または new_iphone_inventory_lines.txt"
+        ),
     )
     parser.add_argument(
         "--timeout",
@@ -226,6 +370,19 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    if args.screenshot is None:
+        args.screenshot = (
+            USED_TERM_SCREENSHOT_DEFAULT
+            if args.flow == "used"
+            else NEW_IPHONE_LIST_SCREENSHOT_DEFAULT
+        )
+    if args.inventory_lines_file is None:
+        args.inventory_lines_file = (
+            USED_TERM_INVENTORY_LINES_DEFAULT
+            if args.flow == "used"
+            else NEW_IPHONE_INVENTORY_LINES_DEFAULT
+        )
+
     try:
         with sync_playwright() as p:
             launch_kw: dict[str, object] = {
@@ -243,91 +400,72 @@ def main() -> int:
                 viewport={"width": 1920, "height": 1080},
             )
             page = context.new_page()
-            page.goto(USED_PRODUCTS_URL, wait_until="domcontentloaded", timeout=args.timeout)
+            start = USED_PRODUCTS_URL if args.flow == "used" else NEW_IPHONE_PRODUCTS_URL
+            page.goto(start, wait_until="domcontentloaded", timeout=args.timeout)
 
             print(f"[一覧] title: {page.title()}")
             print(f"[一覧] url: {page.url}")
 
-            apply_link = page.locator(APPLY_SELECTOR)
-            apply_link.wait_for(state="visible", timeout=args.timeout)
-            page.wait_for_timeout(APPLY_CLICK_DELAY_MS)
-            apply_link.click(timeout=args.timeout)
-            page.wait_for_load_state("domcontentloaded", timeout=args.timeout)
+            if args.flow == "used":
+                _apply_link_and_contract_wizard(
+                    page,
+                    timeout_ms=args.timeout,
+                    pre_apply_wait_ms=APPLY_CLICK_DELAY_MS,
+                    phone_option_delay_ms=KEEP_PHONE_OPTION_DELAY_MS,
+                    post_navigation_wait_ms=0,
+                )
+            else:
+                page.wait_for_timeout(NEW_FLOW_START_WAIT_MS)
+                _apply_link_and_contract_wizard(
+                    page,
+                    timeout_ms=args.timeout,
+                    pre_apply_wait_ms=0,
+                    phone_option_delay_ms=0,
+                    post_navigation_wait_ms=NEW_FLOW_NAV_POST_WAIT_MS,
+                )
 
-            print(f"[申込画面] title: {page.title()}")
-            print(f"[申込画面] url: {page.url}")
+            if args.flow == "used":
+                view_reused = page.locator(VIEW_REUSED_SELECTOR).filter(
+                    has_text="リユース品を見る"
+                )
+                view_reused.scroll_into_view_if_needed(timeout=args.timeout)
+                view_reused.wait_for(state="visible", timeout=args.timeout)
+                view_reused.click(timeout=args.timeout)
+                page.wait_for_load_state("domcontentloaded", timeout=args.timeout)
 
-            phone_radio = page.locator(".a-radio__body").filter(has_text=KEEP_PHONE_LABEL)
-            phone_radio.wait_for(state="visible", timeout=args.timeout)
-            page.wait_for_timeout(KEEP_PHONE_OPTION_DELAY_MS)
-            phone_radio.click(timeout=args.timeout)
+                print(f"[リユース品を見る後] title: {page.title()}")
+                print(f"[リユース品を見る後] url: {page.url}")
 
-            print(f"[電話番号の使い方] 「{KEEP_PHONE_LABEL}」を選択しました")
+                page.wait_for_timeout(2000)
+                page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                page.wait_for_timeout(700)
+                page.evaluate("window.scrollTo(0, 0)")
+                page.wait_for_timeout(400)
 
-            non_docomo = page.locator(NON_DOCOMO_CONTRACT_LABEL_SELECTOR)
-            non_docomo.wait_for(state="visible", timeout=args.timeout)
-            non_docomo.click(timeout=args.timeout)
+                inv_lines = scrape_used_term_inventory_summary(page, timeout_ms=args.timeout)
+                log_tag = "[在庫一覧]"
+            else:
+                page.wait_for_timeout(NEW_FLOW_NAV_POST_WAIT_MS)
+                page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                page.wait_for_timeout(700)
+                page.evaluate("window.scrollTo(0, 0)")
+                page.wait_for_timeout(400)
 
-            print('[契約タイプ] 「docomo以外」を選択しました')
+                inv_lines = scrape_new_iphone_product_list_inventory(
+                    page, timeout_ms=args.timeout
+                )
+                log_tag = "[新品iPhone一覧]"
 
-            buy_terminal = page.locator(TERMINAL_BUY_LABEL_SELECTOR)
-            buy_terminal.wait_for(state="visible", timeout=args.timeout)
-            buy_terminal.click(timeout=args.timeout)
-
-            print('[端末] 「買う」を選択しました')
-
-            next_btn = page.locator(NEXT_STEP_BUTTON_SELECTOR).filter(has_text="次へ")
-            next_btn.wait_for(state="visible", timeout=args.timeout)
-            next_btn.click(timeout=args.timeout)
-            page.wait_for_load_state("domcontentloaded", timeout=args.timeout)
-
-            print(f"[次へ後] title: {page.title()}")
-            print(f"[次へ後] url: {page.url}")
-
-            ready_ok = page.locator(READY_OK_SELECTOR).filter(has_text="準備OK")
-            ready_ok.scroll_into_view_if_needed(timeout=args.timeout)
-            ready_ok.wait_for(state="visible", timeout=args.timeout)
-            ready_ok.click(timeout=args.timeout)
-            page.wait_for_load_state("domcontentloaded", timeout=args.timeout)
-
-            print(f"[準備OK後] title: {page.title()}")
-            print(f"[準備OK後] url: {page.url}")
-
-            iphone_card = page.locator(IPHONE_TERMINAL_SELECTOR)
-            iphone_card.scroll_into_view_if_needed(timeout=args.timeout)
-            iphone_card.wait_for(state="visible", timeout=args.timeout)
-            iphone_card.click(timeout=args.timeout)
-            page.wait_for_load_state("domcontentloaded", timeout=args.timeout)
-
-            print(f"[iPhone選択後] title: {page.title()}")
-            print(f"[iPhone選択後] url: {page.url}")
-
-            view_reused = page.locator(VIEW_REUSED_SELECTOR).filter(has_text="リユース品を見る")
-            view_reused.scroll_into_view_if_needed(timeout=args.timeout)
-            view_reused.wait_for(state="visible", timeout=args.timeout)
-            view_reused.click(timeout=args.timeout)
-            page.wait_for_load_state("domcontentloaded", timeout=args.timeout)
-
-            print(f"[リユース品を見る後] title: {page.title()}")
-            print(f"[リユース品を見る後] url: {page.url}")
-
-            page.wait_for_timeout(2000)
-            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-            page.wait_for_timeout(700)
-            page.evaluate("window.scrollTo(0, 0)")
-            page.wait_for_timeout(400)
-
-            inv_lines = scrape_used_term_inventory_summary(page, timeout_ms=args.timeout)
             args.inventory_lines_file.parent.mkdir(parents=True, exist_ok=True)
             args.inventory_lines_file.write_text(
                 "\n".join(inv_lines) + ("\n" if inv_lines else ""),
                 encoding="utf-8",
             )
-            print(f"[在庫一覧] {len(inv_lines)} 件 → {args.inventory_lines_file.resolve()}")
+            print(f"{log_tag} {len(inv_lines)} 件 → {args.inventory_lines_file.resolve()}")
             for line in inv_lines:
                 print(f"    {line}")
 
-            print("[ここでスクショを撮る]")
+            print("[スクショを撮る]")
 
             args.screenshot.parent.mkdir(parents=True, exist_ok=True)
             page.screenshot(path=str(args.screenshot), full_page=True)

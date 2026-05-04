@@ -1,5 +1,6 @@
 """
 used_term_select_full.png から GitHub Pages 用の index.html を生成する。
+new_iphone_inventory_lines.txt があれば site/new-iphone.html（新品在庫ピボット表）も出力する。
 CI では main.py 成功後にこのスクリプトを実行する。
 
 環境変数:
@@ -12,6 +13,7 @@ from __future__ import annotations
 import html
 import json
 import os
+import re
 import shutil
 import sys
 from collections import OrderedDict
@@ -20,6 +22,8 @@ from pathlib import Path
 
 IMAGE_NAME = "used_term_select_full.png"
 INVENTORY_LINES_NAME = "used_term_inventory_lines.txt"
+NEW_IPHONE_LINES_NAME = "new_iphone_inventory_lines.txt"
+NEW_IPHONE_HTML_NAME = "new-iphone.html"
 JST = timezone(timedelta(hours=9))
 
 # 列は main.py が出力する「ランク：A+」「ランク：A」「ランク：B」に対応
@@ -30,6 +34,27 @@ RANK_COLUMNS: tuple[tuple[str, str], ...] = (
     ("B", "ランクB"),
 )
 MISSING_STOCK_CELL = "—"
+# 新品 iPhone 表: 空セルはユーザ指定どおり「---」
+NEW_IPHONE_EMPTY_CELL = "---"
+NEW_IPHONE_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("norm", "ノーマル"),
+    ("e", "e"),
+    ("pro", "Pro"),
+    ("pro_max", "Pro Max"),
+)
+# 新品表の行を並べる優先順（数値は世代キー文字列）
+_NEW_IPHONE_ROW_PREFERRED_ORDER = (
+    "17",
+    "air",
+    "16",
+    "15",
+    "14",
+    "13",
+    "12",
+    "11",
+    "10",
+    "se3",
+)
 
 
 def inventory_stock_td_class(display_val: str) -> str:
@@ -38,9 +63,125 @@ def inventory_stock_td_class(display_val: str) -> str:
         return "stock-in"
     if display_val == "在庫なし":
         return "stock-out"
-    if display_val == MISSING_STOCK_CELL:
+    if display_val in (MISSING_STOCK_CELL, NEW_IPHONE_EMPTY_CELL):
         return "stock-dash"
     return "stock-other"
+
+
+def new_iphone_row_label(row_key: str) -> str:
+    if row_key == "air":
+        return "iPhone Air"
+    if row_key == "se3":
+        return "iPhone SE(第3世代)"
+    if row_key.isdigit():
+        return f"iPhone {row_key}"
+    return row_key
+
+
+def parse_new_iphone_inventory_line(line: str) -> tuple[str, str] | None:
+    """「iPhone xxx 在庫あり」形式から (機種名, 在庫) を取り出す。"""
+    s = line.strip()
+    if not s:
+        return None
+    for suffix in ("在庫あり", "在庫なし", "不明"):
+        if s.endswith(suffix):
+            model = s[: -len(suffix)].strip()
+            if model:
+                return model, suffix
+    return None
+
+
+def classify_new_iphone_model(model: str) -> tuple[str, str] | None:
+    """
+    (表の行キー, 列キー) を返す。
+    行キー: 世代の数字文字列 / air / se3
+    列キー: norm / e / pro / pro_max
+    """
+    m = model.strip()
+    if m in ("iPhone SE(第3世代)", "iPhone SE（第3世代）"):
+        return ("se3", "norm")
+    if m == "iPhone Air":
+        return ("air", "norm")
+
+    mm = re.match(r"^iPhone (\d+) Pro Max$", m)
+    if mm:
+        return (mm.group(1), "pro_max")
+    mm = re.match(r"^iPhone (\d+) Pro$", m)
+    if mm:
+        return (mm.group(1), "pro")
+    mm = re.match(r"^iPhone (\d+)e$", m)
+    if mm:
+        return (mm.group(1), "e")
+    mm = re.match(r"^iPhone (\d+)$", m)
+    if mm:
+        return (mm.group(1), "norm")
+    return None
+
+
+def ordered_new_iphone_row_keys(keys: set[str]) -> list[str]:
+    out: list[str] = [k for k in _NEW_IPHONE_ROW_PREFERRED_ORDER if k in keys]
+    numeric_left = sorted(
+        (k for k in keys if k not in out and k.isdigit()),
+        key=int,
+        reverse=True,
+    )
+    out.extend(numeric_left)
+    out.extend(sorted(k for k in keys if k not in out))
+    return out
+
+
+def new_iphone_table_from_txt(raw: str) -> str | None:
+    """新品 iPhone 用 pivot テーブル HTML。解釈できる行が無ければ None。"""
+    grid: dict[str, dict[str, str]] = {}
+    for line in raw.splitlines():
+        parsed = parse_new_iphone_inventory_line(line.strip())
+        if not parsed:
+            continue
+        model, stock = parsed
+        place = classify_new_iphone_model(model)
+        if not place:
+            continue
+        row_k, col_k = place
+        if row_k not in grid:
+            grid[row_k] = {c: "" for c, _ in NEW_IPHONE_COLUMNS}
+        grid[row_k][col_k] = stock
+
+    if not grid:
+        return None
+
+    head_cells = "".join(
+        f'<th scope="col">{html.escape(label)}</th>' for _key, label in NEW_IPHONE_COLUMNS
+    )
+    header_row = f'<tr><th scope="col">機種</th>{head_cells}</tr>'
+
+    body_rows: list[str] = []
+    for row_k in ordered_new_iphone_row_keys(set(grid.keys())):
+        cells = grid[row_k]
+        row_title = new_iphone_row_label(row_k)
+        td_parts: list[str] = []
+        for col_k, _lbl in NEW_IPHONE_COLUMNS:
+            v = cells.get(col_k, "").strip()
+            disp = v if v else NEW_IPHONE_EMPTY_CELL
+            css = inventory_stock_td_class(disp)
+            td_parts.append(f'<td class="{css}">{html.escape(disp)}</td>')
+        body_rows.append(
+            "<tr>"
+            f'<th scope="row">{html.escape(row_title)}</th>'
+            f'{"".join(td_parts)}'
+            "</tr>"
+        )
+
+    tbody = "\n".join(f"      {row}" for row in body_rows)
+    return (
+        '    <table class="inventory-table">\n'
+        "      <thead>\n"
+        f"        {header_row}\n"
+        "      </thead>\n"
+        "      <tbody>\n"
+        f"{tbody}\n"
+        "      </tbody>\n"
+        "    </table>"
+    )
 
 
 def iphone_label_cell(full_title: str) -> str:
@@ -171,6 +312,105 @@ def inventory_summary_html(repo_root: Path) -> str:
     )
 
 
+def shared_site_styles() -> str:
+    """index / new-iphone 共通のレイアウト・在庫表スタイル。"""
+    return """    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 1rem auto;
+      width: 100%;
+      max-width: 1400px;
+      padding: 0 clamp(0.5rem, 2.5vw, 0.75rem);
+      line-height: 1.5;
+    }
+    .time-main { font-size: 1.15rem; font-weight: 600; color: #111; margin: 0.5rem 0 1rem; }
+    .note { font-size: 0.88rem; color: #555; margin: 0.85rem 0 1.25rem; line-height: 1.6; max-width: 46em; }
+    img { max-width: 100%; height: auto; border: 1px solid #ddd; }
+    .btn {
+      font-size: 1rem;
+      padding: 0.55rem 1.25rem;
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      cursor: pointer;
+      font-weight: 600;
+      margin-right: 0.5rem;
+      margin-bottom: 0.35rem;
+    }
+    .btn-primary { background: #0d9488; }
+    .btn-primary:hover { background: #0f766e; }
+    .btn-secondary { background: #64748b; }
+    .btn-secondary:hover { background: #475569; }
+    .btn:focus-visible { outline: 2px solid #115e59; outline-offset: 2px; }
+    .inventory-summary {
+      margin: 0.5rem 0 1.25rem;
+      padding: 0.75rem 1rem;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 0.93rem;
+      line-height: 1.55;
+    }
+    .inventory-summary h2 { font-size: 1rem; margin: 0 0 0.5rem 0; }
+    .inventory-summary .inventory-table-wrap {
+      width: 100%;
+      max-width: 100%;
+      margin-top: 0.25rem;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior-x: contain;
+      scrollbar-gutter: stable;
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
+      background: #fff;
+    }
+    .inventory-summary .inventory-table-wrap .inventory-table {
+      width: max-content;
+      border-collapse: collapse;
+      font-size: clamp(0.78rem, 2.85vw, 0.93rem);
+    }
+    .inventory-summary .inventory-table-wrap .inventory-table th,
+    .inventory-summary .inventory-table-wrap .inventory-table td {
+      border: 1px solid #cbd5e1;
+      padding: 0.35rem 0.5rem;
+      text-align: left;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+    @media (min-width: 768px) {
+      .inventory-summary .inventory-table-wrap .inventory-table {
+        width: 100%;
+        font-size: 0.93rem;
+        table-layout: fixed;
+      }
+    }
+    .inventory-table th { background: #e2e8f0; font-weight: 600; }
+    .inventory-table tbody th[scope="row"] { background: #f1f5f9; font-weight: 600; }
+    .inventory-table tbody tr:nth-child(even) th[scope="row"] { background: #e8eef5; }
+    .inventory-table td.stock-in {
+      background: #ccfbf1;
+      color: #0f766e;
+      font-weight: 600;
+      box-shadow: inset 0 0 0 1px rgba(13,148,136,0.35);
+      border-radius: 4px;
+    }
+    .inventory-table td.stock-out {
+      background: #fce7f3;
+      color: #9d174d;
+    }
+    .inventory-table td.stock-dash {
+      background: #f3f4f6;
+      color: #6b7280;
+    }
+    .inventory-table td.stock-other {
+      background: #fef9c3;
+      color: #854d0e;
+    }
+    .inventory-summary ul { margin: 0; padding-left: 1.35rem; }
+    .inventory-summary li { margin-bottom: 0.2rem; }
+"""
+
+
 def main() -> int:
     repo_root = Path(__file__).resolve().parent
     img = repo_root / IMAGE_NAME
@@ -249,109 +489,14 @@ def main() -> int:
   </script>
 """
 
-    html = f"""<!DOCTYPE html>
+    index_html = f"""<!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{title}</title>
   <style>
-    *, *::before, *::after {{ box-sizing: border-box; }}
-    body {{
-      font-family: system-ui, sans-serif;
-      margin: 1rem auto;
-      width: 100%;
-      max-width: 1400px;
-      padding: 0 clamp(0.5rem, 2.5vw, 0.75rem);
-      line-height: 1.5;
-    }}
-    .time-main {{ font-size: 1.15rem; font-weight: 600; color: #111; margin: 0.5rem 0 1rem; }}
-    .note {{ font-size: 0.88rem; color: #555; margin: 0.85rem 0 1.25rem; line-height: 1.6; max-width: 46em; }}
-    img {{ max-width: 100%; height: auto; border: 1px solid #ddd; }}
-    .btn {{
-      font-size: 1rem;
-      padding: 0.55rem 1.25rem;
-      border: none;
-      border-radius: 6px;
-      color: #fff;
-      cursor: pointer;
-      font-weight: 600;
-      margin-right: 0.5rem;
-      margin-bottom: 0.35rem;
-    }}
-    .btn-primary {{ background: #0d9488; }}
-    .btn-primary:hover {{ background: #0f766e; }}
-    .btn-secondary {{ background: #64748b; }}
-    .btn-secondary:hover {{ background: #475569; }}
-    .btn:focus-visible {{ outline: 2px solid #115e59; outline-offset: 2px; }}
-    .inventory-summary {{
-      margin: 0.5rem 0 1.25rem;
-      padding: 0.75rem 1rem;
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      font-size: 0.93rem;
-      line-height: 1.55;
-    }}
-    .inventory-summary h2 {{ font-size: 1rem; margin: 0 0 0.5rem 0; }}
-    .inventory-summary .inventory-table-wrap {{
-      width: 100%;
-      max-width: 100%;
-      margin-top: 0.25rem;
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-      overscroll-behavior-x: contain;
-      scrollbar-gutter: stable;
-      border-radius: 8px;
-      border: 1px solid #e2e8f0;
-      background: #fff;
-    }}
-    /* スマホ: コンテンツ実幅で横スクロール（一覧全体が指で見渡せる） */
-    .inventory-summary .inventory-table-wrap .inventory-table {{
-      width: max-content;
-      border-collapse: collapse;
-      font-size: clamp(0.78rem, 2.85vw, 0.93rem);
-    }}
-    .inventory-summary .inventory-table-wrap .inventory-table th,
-    .inventory-summary .inventory-table-wrap .inventory-table td {{
-      border: 1px solid #cbd5e1;
-      padding: 0.35rem 0.5rem;
-      text-align: left;
-      vertical-align: middle;
-      white-space: nowrap;
-    }}
-    /* PC〜タブレット: コンテナ幅いっぱいに広げる */
-    @media (min-width: 768px) {{
-      .inventory-summary .inventory-table-wrap .inventory-table {{
-        width: 100%;
-        font-size: 0.93rem;
-        table-layout: fixed;
-      }}
-    }}
-    .inventory-table th {{ background: #e2e8f0; font-weight: 600; }}
-    .inventory-table tbody th[scope="row"] {{ background: #f1f5f9; font-weight: 600; }}
-    .inventory-table tbody tr:nth-child(even) th[scope="row"] {{ background: #e8eef5; }}
-    .inventory-table td.stock-in {{
-      background: #ccfbf1;
-      color: #0f766e;
-      font-weight: 600;
-      box-shadow: inset 0 0 0 1px rgba(13,148,136,0.35);
-      border-radius: 4px;
-    }}
-    .inventory-table td.stock-out {{
-      background: #fce7f3;
-      color: #9d174d;
-    }}
-    .inventory-table td.stock-dash {{
-      background: #f3f4f6;
-      color: #6b7280;
-    }}
-    .inventory-table td.stock-other {{
-      background: #fef9c3;
-      color: #854d0e;
-    }}
-    .inventory-summary ul {{ margin: 0; padding-left: 1.35rem; }}
-    .inventory-summary li {{ margin-bottom: 0.2rem; }}
+{shared_site_styles()}
   </style>
 </head>
 <body>
@@ -364,7 +509,45 @@ def main() -> int:
 </body>
 </html>
 """
-    (out_dir / "index.html").write_text(html, encoding="utf-8")
+    (out_dir / "index.html").write_text(index_html, encoding="utf-8")
+
+    new_lines_path = repo_root / NEW_IPHONE_LINES_NAME
+    if new_lines_path.is_file():
+        shutil.copy2(new_lines_path, out_dir / NEW_IPHONE_LINES_NAME)
+        raw_new = new_lines_path.read_text(encoding="utf-8").strip()
+        table_new = new_iphone_table_from_txt(raw_new) if raw_new else None
+        if table_new:
+            title_new_iphone = "ahamo 新品iPhone在庫状況"
+            esc_new = html.escape(title_new_iphone)
+            new_inv_block = (
+                '  <section class="inventory-summary" aria-label="新品iPhone在庫">\n'
+                '    <div class="inventory-table-wrap">\n'
+                f"{table_new}\n"
+                "    </div>\n"
+                "  </section>\n"
+            )
+            new_page = f"""<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{esc_new}</title>
+  <style>
+{shared_site_styles()}
+  </style>
+</head>
+<body>
+  <h1>{esc_new}</h1>
+  <p class="time-main">データ更新日時（日本時間・JST）: <br>{time_jst}</p>
+{buttons_block}
+{note_block}
+{new_inv_block}{script_handlers}
+</body>
+</html>
+"""
+            (out_dir / NEW_IPHONE_HTML_NAME).write_text(new_page, encoding="utf-8")
+            print(f"new-iphone page -> {(out_dir / NEW_IPHONE_HTML_NAME).resolve()}")
+
     print(f"site -> {out_dir.resolve()}")
     if gas_trigger_url:
         print("build_site: GAS_TRIGGER_URL is set（再取得ボタンを出力）")

@@ -3,4 +3,4 @@ site/
 __pycache__/
 *.pyc
 *.png
-used_term_inventory_lines.txt
+*.txt
