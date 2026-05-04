@@ -495,9 +495,10 @@ def main() -> int:
         )
         note_block = """  <p class="note">
     <strong>表示を更新</strong> はこのページだけ再読み込みします。<br>
-    <strong>在庫状況の再取得を依頼</strong> は別タブで ahamo のサイトのリユース品一覧ページの在庫状況を取得します。<br>
+    <strong>在庫状況の再取得を依頼</strong> は別タブで ahamo のサイトの在庫状況を取得します。<br>
     取得が始まったら、およそ数分〜5分ほどで反映されます（キューにより前後します）。<br>
-    しばらくしてから <strong>表示を更新</strong> を押すと、在庫表が最新になります。
+    しばらくしてから <strong>表示を更新</strong> を押すと、在庫表が最新になります。<br>
+    情報は約30分に一度自動的に更新されます。
   </p>
 """
         script_handlers = """  <script>
@@ -570,7 +571,7 @@ def main() -> int:
 </head>
 <body>
   <h1>{title}</h1>
-  <p class="time-main">データ更新日時(JST): {time_jst} (30分に一度更新)</p>
+  <p class="time-main">データ更新日時(JST): {time_jst} (30分に一度自動更新)</p>
 {buttons_block}
 {note_block}
 {new_inv_block}{reused_inv_block}{script_handlers}
