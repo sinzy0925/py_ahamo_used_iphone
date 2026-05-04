@@ -25,8 +25,8 @@ JST = timezone(timedelta(hours=9))
 # 列は main.py が出力する「ランク：A+」「ランク：A」「ランク：B」に対応
 _RANK_KEYS = ("A+", "A", "B")
 RANK_COLUMNS: tuple[tuple[str, str], ...] = (
-    ("A+", "ランクA+在庫"),
-    ("A", "ランクA在庫"),
+    ("A+", "ランクA+"),
+    ("A", "ランクA"),
     ("B", "ランクB"),
 )
 MISSING_STOCK_CELL = "—"
@@ -147,7 +147,7 @@ def inventory_summary_html(repo_root: Path) -> str:
     if table_inner is not None:
         return (
             '  <section class="inventory-summary" aria-labelledby="inv-h">\n'
-            '    <h2 id="inv-h">機種・ランク別の在庫</h2>\n'
+            '    <h2 id="inv-h">リユース品の在庫状況（機種・ランク別）</h2>\n'
             '    <div class="inventory-table-wrap">\n'
             f"{table_inner}\n"
             "    </div>\n"
@@ -165,7 +165,7 @@ def inventory_summary_html(repo_root: Path) -> str:
         return ""
     return (
         '  <section class="inventory-summary" aria-labelledby="inv-h">'
-        f"\n    <h2 id=\"inv-h\">機種・ランク別の在庫</h2>\n"
+        f"\n    <h2 id=\"inv-h\">リユース品の在庫状況（機種・ランク別）</h2>\n"
         f"    <ul>\n{chr(10).join(lis)}\n    </ul>\n"
         f"  </section>\n"
     )
@@ -190,7 +190,7 @@ def main() -> int:
 
     inv_block = inventory_summary_html(repo_root)
 
-    title = "ahamo リユース品の選択（スクショ）"
+    title = "ahamo リユース品（在庫状況）"
 
     time_jst = now_jst.strftime("%Y-%m-%d %H:%M:%S")
 
