@@ -219,8 +219,8 @@ function handleRequest_(e) {
       'OK: workflow dispatched. Ref=' +
       gitRef +
       '\n\n' +
-      '現在、リユース品の選択画面のスクショを取得中です。\n' +
-      '２分程度お待ちの上、再度以下のURLを開いてください。\n\n' +
+      '現在、在庫状況を再取得中です。\n' +
+      '数分程度お待ちの上、再度以下のURLを開いてください。\n\n' +
       'リンク\n' +
       site;
     return textOut_(okMsg, 200);

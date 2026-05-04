@@ -570,7 +570,7 @@ def main() -> int:
 </head>
 <body>
   <h1>{title}</h1>
-  <p class="time-main">データ更新日時(JST): {time_jst}</p>
+  <p class="time-main">データ更新日時(JST): {time_jst} (30分に一度更新)</p>
 {buttons_block}
 {note_block}
 {new_inv_block}{reused_inv_block}{script_handlers}
