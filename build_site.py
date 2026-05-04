@@ -1,6 +1,12 @@
 """
 used_term_select_full.png から GitHub Pages 用の index.html を生成する。
-new_iphone_inventory_lines.txt があれば site/new-iphone.html（新品在庫ピボット表）も出力する。
+
+index.html の並び:
+  見出し〜注記 → 新品iPhone在庫表 → リユース在庫表 → スクリプト → new_iphone_list_full.png → used_term_select_full.png
+
+new_iphone_inventory_lines.txt / new_iphone_list_full.png があれば site/ にコピーし、
+new-iphone.html（単体ページ）も従来どおり出力する。
+
 CI では main.py 成功後にこのスクリプトを実行する。
 
 環境変数:
@@ -21,6 +27,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 IMAGE_NAME = "used_term_select_full.png"
+NEW_IPHONE_IMAGE_NAME = "new_iphone_list_full.png"
+SCREENSHOT_CAPTION_NEW_IPHONE = "ahamo 新品iPhone 一覧ページのスクショ"
+SCREENSHOT_CAPTION_REUSED     = "ahamo リユース品 一覧ページのスクショ"
 INVENTORY_LINES_NAME = "used_term_inventory_lines.txt"
 NEW_IPHONE_LINES_NAME = "new_iphone_inventory_lines.txt"
 NEW_IPHONE_HTML_NAME = "new-iphone.html"
@@ -181,6 +190,27 @@ def new_iphone_table_from_txt(raw: str) -> str | None:
         f"{tbody}\n"
         "      </tbody>\n"
         "    </table>"
+    )
+
+
+def new_iphone_inventory_section_html(repo_root: Path) -> str:
+    """new_iphone_inventory_lines.txt から新品在庫セクション HTML。無ければ空文字。"""
+    path = repo_root / NEW_IPHONE_LINES_NAME
+    if not path.is_file():
+        return ""
+    raw = path.read_text(encoding="utf-8").strip()
+    if not raw:
+        return ""
+    table_inner = new_iphone_table_from_txt(raw)
+    if not table_inner:
+        return ""
+    return (
+        '  <section class="inventory-summary" aria-labelledby="newiphone-inv">\n'
+        '    <h2 id="newiphone-inv">新品iPhoneの在庫状況（機種別）</h2>\n'
+        '    <div class="inventory-table-wrap">\n'
+        f"{table_inner}\n"
+        "    </div>\n"
+        "  </section>\n"
     )
 
 
@@ -408,6 +438,14 @@ def shared_site_styles() -> str:
     }
     .inventory-summary ul { margin: 0; padding-left: 1.35rem; }
     .inventory-summary li { margin-bottom: 0.2rem; }
+    .screenshot-block { margin: 1.15rem 0 0; }
+    .screenshot-heading {
+      font-size: 1rem;
+      font-weight: 600;
+      margin: 0 0 0.45rem 0;
+      color: #111;
+    }
+    .screenshot-block p { margin: 0; }
 """
 
 
@@ -426,9 +464,18 @@ def main() -> int:
     if inv_src.is_file():
         shutil.copy2(inv_src, out_dir / INVENTORY_LINES_NAME)
 
+    new_inv_path = repo_root / NEW_IPHONE_LINES_NAME
+    if new_inv_path.is_file():
+        shutil.copy2(new_inv_path, out_dir / NEW_IPHONE_LINES_NAME)
+
+    new_img_path = repo_root / NEW_IPHONE_IMAGE_NAME
+    if new_img_path.is_file():
+        shutil.copy2(new_img_path, out_dir / NEW_IPHONE_IMAGE_NAME)
+
     now_jst = datetime.now(timezone.utc).astimezone(JST)
 
-    inv_block = inventory_summary_html(repo_root)
+    new_inv_block = new_iphone_inventory_section_html(repo_root)
+    reused_inv_block = inventory_summary_html(repo_root)
 
     title = "ahamo iPhone 在庫状況(新品・リユース品)"
 
@@ -489,6 +536,28 @@ def main() -> int:
   </script>
 """
 
+    cache_bust = f"{now_jst.timestamp():.0f}"
+
+    new_img_html = ""
+    if (out_dir / NEW_IPHONE_IMAGE_NAME).is_file():
+        cap_new = html.escape(SCREENSHOT_CAPTION_NEW_IPHONE)
+        new_img_html = (
+            '  <div class="screenshot-block">\n'
+            f'    <h2 class="screenshot-heading">{cap_new}</h2>\n'
+            f'    <p><img src="{NEW_IPHONE_IMAGE_NAME}?v={cache_bust}" '
+            'alt="新品iPhone 一覧ページのスクリーンショット"></p>\n'
+            "  </div>\n"
+        )
+
+    cap_used = html.escape(SCREENSHOT_CAPTION_REUSED)
+    used_img_html = (
+        '  <div class="screenshot-block">\n'
+        f'    <h2 class="screenshot-heading">{cap_used}</h2>\n'
+        f'    <p><img src="{IMAGE_NAME}?v={cache_bust}" '
+        'alt="リユース品の選択 ページ全体"></p>\n'
+        "  </div>\n"
+    )
+
     index_html = f"""<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -504,29 +573,16 @@ def main() -> int:
   <p class="time-main">データ更新日時(JST): {time_jst}</p>
 {buttons_block}
 {note_block}
-{inv_block}{script_handlers}
-  <p><img src="{IMAGE_NAME}?v={now_jst.timestamp():.0f}" alt="リユース品の選択 ページ全体"></p>
-</body>
+{new_inv_block}{reused_inv_block}{script_handlers}
+{new_img_html}{used_img_html}</body>
 </html>
 """
     (out_dir / "index.html").write_text(index_html, encoding="utf-8")
 
-    new_lines_path = repo_root / NEW_IPHONE_LINES_NAME
-    if new_lines_path.is_file():
-        shutil.copy2(new_lines_path, out_dir / NEW_IPHONE_LINES_NAME)
-        raw_new = new_lines_path.read_text(encoding="utf-8").strip()
-        table_new = new_iphone_table_from_txt(raw_new) if raw_new else None
-        if table_new:
-            title_new_iphone = "ahamo 新品iPhone在庫状況"
-            esc_new = html.escape(title_new_iphone)
-            new_inv_block = (
-                '  <section class="inventory-summary" aria-label="新品iPhone在庫">\n'
-                '    <div class="inventory-table-wrap">\n'
-                f"{table_new}\n"
-                "    </div>\n"
-                "  </section>\n"
-            )
-            new_page = f"""<!DOCTYPE html>
+    if new_inv_block:
+        title_new_iphone = "ahamo 新品iPhone在庫状況"
+        esc_new = html.escape(title_new_iphone)
+        new_page = f"""<!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="utf-8">
@@ -545,8 +601,8 @@ def main() -> int:
 </body>
 </html>
 """
-            (out_dir / NEW_IPHONE_HTML_NAME).write_text(new_page, encoding="utf-8")
-            print(f"new-iphone page -> {(out_dir / NEW_IPHONE_HTML_NAME).resolve()}")
+        (out_dir / NEW_IPHONE_HTML_NAME).write_text(new_page, encoding="utf-8")
+        print(f"new-iphone page -> {(out_dir / NEW_IPHONE_HTML_NAME).resolve()}")
 
     print(f"site -> {out_dir.resolve()}")
     if gas_trigger_url:

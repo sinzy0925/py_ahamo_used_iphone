@@ -34,8 +34,11 @@ jobs:
       - name: Install Playwright Chromium
         run: python -m playwright install chromium --with-deps
 
-      - name: Run automation
+      - name: Run automation (リユース品一覧)
         run: python main.py --user-agent --headless
+
+      - name: Run automation (新品 iPhone 一覧)
+        run: python main.py --user-agent --headless --flow new-iphone
 
       - name: Build static site
         env:
