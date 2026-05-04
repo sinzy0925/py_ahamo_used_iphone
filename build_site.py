@@ -81,7 +81,7 @@ def new_iphone_row_label(row_key: str) -> str:
     if row_key == "air":
         return "iPhone Air"
     if row_key == "se3":
-        return "iPhone SE(第3世代)"
+        return "SE(第３世代)"
     if row_key.isdigit():
         return f"iPhone {row_key}"
     return row_key
