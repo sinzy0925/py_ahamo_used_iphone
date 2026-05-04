@@ -430,7 +430,7 @@ def main() -> int:
 
     inv_block = inventory_summary_html(repo_root)
 
-    title = "ahamo iPhone <br>リユース品の在庫状況"
+    title = "ahamo iPhone 在庫状況(新品・リユース品)"
 
     time_jst = now_jst.strftime("%Y-%m-%d %H:%M:%S")
 
@@ -501,7 +501,7 @@ def main() -> int:
 </head>
 <body>
   <h1>{title}</h1>
-  <p class="time-main">データ更新日時（日本時間・JST）: <br>{time_jst}</p>
+  <p class="time-main">データ更新日時(JST): {time_jst}</p>
 {buttons_block}
 {note_block}
 {inv_block}{script_handlers}
