@@ -201,14 +201,16 @@ def main() -> int:
     if gas_trigger_url:
         workflow_btn = (
             '<button type="button" class="btn btn-primary" id="request-workflow">'
-            "スクショの再取得を依頼</button>"
+            "在庫状況の再取得を依頼</button>"
         )
         buttons_block = (
             f"<p>{reload_btn} {workflow_btn}</p>"
         )
         note_block = """  <p class="note">
-    <strong>表示を更新</strong> はこのページだけ再読み込みします。<strong>スクショの再取得を依頼</strong> は別タブで ahamo のサイトのリユース品一覧ページのスクショを取得します。
-    取得が始まったら、およそ数分〜5分ほどで反映されます（キューにより前後します）。しばらくしてから <strong>表示を更新</strong> を押すと、スクショと在庫表が最新になります。
+    <strong>表示を更新</strong> はこのページだけ再読み込みします。<br>
+    <strong>在庫状況の再取得を依頼</strong> は別タブで ahamo のサイトのリユース品一覧ページの在庫状況を取得します。<br>
+    取得が始まったら、およそ数分〜5分ほどで反映されます（キューにより前後します）。<br>
+    しばらくしてから <strong>表示を更新</strong> を押すと、在庫表が最新になります。
   </p>
 """
         script_handlers = """  <script>
