@@ -254,7 +254,15 @@ def main() -> int:
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{title}</title>
   <style>
-    body {{ font-family: system-ui, sans-serif; margin: 1rem auto; max-width: 1200px; padding: 0 0.75rem; line-height: 1.5; }}
+    *, *::before, *::after {{ box-sizing: border-box; }}
+    body {{
+      font-family: system-ui, sans-serif;
+      margin: 1rem auto;
+      width: 100%;
+      max-width: 1400px;
+      padding: 0 clamp(0.5rem, 2.5vw, 0.75rem);
+      line-height: 1.5;
+    }}
     .time-main {{ font-size: 1.15rem; font-weight: 600; color: #111; margin: 0.5rem 0 1rem; }}
     .note {{ font-size: 0.88rem; color: #555; margin: 0.85rem 0 1.25rem; line-height: 1.6; max-width: 46em; }}
     img {{ max-width: 100%; height: auto; border: 1px solid #ddd; }}
@@ -284,13 +292,39 @@ def main() -> int:
       line-height: 1.55;
     }}
     .inventory-summary h2 {{ font-size: 1rem; margin: 0 0 0.5rem 0; }}
-    .inventory-summary .inventory-table-wrap {{ overflow-x: auto; margin-top: 0.25rem; }}
-    .inventory-table {{ width: 100%; border-collapse: collapse; font-size: 0.93rem; }}
-    .inventory-table th, .inventory-table td {{
+    .inventory-summary .inventory-table-wrap {{
+      width: 100%;
+      max-width: 100%;
+      margin-top: 0.25rem;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior-x: contain;
+      scrollbar-gutter: stable;
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
+      background: #fff;
+    }}
+    /* スマホ: コンテンツ実幅で横スクロール（一覧全体が指で見渡せる） */
+    .inventory-summary .inventory-table-wrap .inventory-table {{
+      width: max-content;
+      border-collapse: collapse;
+      font-size: clamp(0.78rem, 2.85vw, 0.93rem);
+    }}
+    .inventory-summary .inventory-table-wrap .inventory-table th,
+    .inventory-summary .inventory-table-wrap .inventory-table td {{
       border: 1px solid #cbd5e1;
-      padding: 0.4rem 0.55rem;
+      padding: 0.35rem 0.5rem;
       text-align: left;
+      vertical-align: middle;
       white-space: nowrap;
+    }}
+    /* PC〜タブレット: コンテナ幅いっぱいに広げる */
+    @media (min-width: 768px) {{
+      .inventory-summary .inventory-table-wrap .inventory-table {{
+        width: 100%;
+        font-size: 0.93rem;
+        table-layout: fixed;
+      }}
     }}
     .inventory-table th {{ background: #e2e8f0; font-weight: 600; }}
     .inventory-table tbody th[scope="row"] {{ background: #f1f5f9; font-weight: 600; }}
