@@ -87,16 +87,30 @@ def new_iphone_row_label(row_key: str) -> str:
     return row_key
 
 
-def parse_new_iphone_inventory_line(line: str) -> tuple[str, str] | None:
-    """「iPhone xxx 在庫あり」形式から (機種名, 在庫) を取り出す。"""
+def parse_new_iphone_inventory_line(line: str) -> tuple[str, str, str, str] | None:
+    """
+    1行から (機種名, 在庫, ストレージ表記, 価格表記) を取り出す。
+    新形式: タブ区切り4列。旧形式: 「iPhone xxx 在庫あり」（storage/price は空）。
+    """
     s = line.strip()
     if not s:
         return None
+    if "\t" in s:
+        parts = s.split("\t")
+        if len(parts) >= 4:
+            return (
+                parts[0].strip(),
+                parts[1].strip(),
+                parts[2].strip(),
+                parts[3].strip(),
+            )
+        if len(parts) >= 2:
+            return parts[0].strip(), parts[1].strip(), "", ""
     for suffix in ("在庫あり", "在庫なし", "不明"):
         if s.endswith(suffix):
             model = s[: -len(suffix)].strip()
             if model:
-                return model, suffix
+                return model, suffix, "", ""
     return None
 
 
@@ -140,20 +154,27 @@ def ordered_new_iphone_row_keys(keys: set[str]) -> list[str]:
 
 
 def new_iphone_table_from_txt(raw: str) -> str | None:
-    """新品 iPhone 用 pivot テーブル HTML。解釈できる行が無ければ None。"""
-    grid: dict[str, dict[str, str]] = {}
+    """新品 iPhone 用 pivot テーブル HTML（在庫・ストレージ・価格の3段）。"""
+    grid: dict[str, dict[str, dict[str, str]]] = {}
     for line in raw.splitlines():
         parsed = parse_new_iphone_inventory_line(line.strip())
         if not parsed:
             continue
-        model, stock = parsed
+        model, stock, storage, price = parsed
         place = classify_new_iphone_model(model)
         if not place:
             continue
         row_k, col_k = place
         if row_k not in grid:
-            grid[row_k] = {c: "" for c, _ in NEW_IPHONE_COLUMNS}
-        grid[row_k][col_k] = stock
+            grid[row_k] = {
+                c: {"stock": "", "storage": "", "price": ""}
+                for c, _ in NEW_IPHONE_COLUMNS
+            }
+        grid[row_k][col_k] = {
+            "stock": stock,
+            "storage": storage,
+            "price": price,
+        }
 
     if not grid:
         return None
@@ -165,20 +186,36 @@ def new_iphone_table_from_txt(raw: str) -> str | None:
 
     body_rows: list[str] = []
     for row_k in ordered_new_iphone_row_keys(set(grid.keys())):
-        cells = grid[row_k]
+        rank_cells = grid[row_k]
         row_title = new_iphone_row_label(row_k)
-        td_parts: list[str] = []
+        vals_stock: list[str] = []
+        vals_storage: list[str] = []
+        vals_price: list[str] = []
         for col_k, _lbl in NEW_IPHONE_COLUMNS:
-            v = cells.get(col_k, "").strip()
-            disp = v if v else NEW_IPHONE_EMPTY_CELL
-            css = inventory_stock_td_class(disp)
-            td_parts.append(f'<td class="{css}">{html.escape(disp)}</td>')
+            cell = rank_cells.get(col_k) or {}
+            st = (cell.get("stock") or "").strip()
+            su = (cell.get("storage") or "").strip()
+            pr = (cell.get("price") or "").strip()
+            vals_stock.append(st if st else NEW_IPHONE_EMPTY_CELL)
+            vals_storage.append(su if su else NEW_IPHONE_EMPTY_CELL)
+            vals_price.append(pr if pr else NEW_IPHONE_EMPTY_CELL)
+        td_stock = "".join(
+            f'<td class="{inventory_stock_td_class(v)}">{html.escape(v)}</td>'
+            for v in vals_stock
+        )
+        td_storage = "".join(
+            f'<td class="inventory-meta">{html.escape(v)}</td>' for v in vals_storage
+        )
+        td_price = "".join(
+            f'<td class="inventory-meta">{html.escape(v)}</td>' for v in vals_price
+        )
         body_rows.append(
             "<tr>"
-            f'<th scope="row">{html.escape(row_title)}</th>'
-            f'{"".join(td_parts)}'
-            "</tr>"
+            f'<th scope="row" rowspan="3">{html.escape(row_title)}</th>'
+            f"{td_stock}</tr>"
         )
+        body_rows.append(f"<tr>{td_storage}</tr>")
+        body_rows.append(f"<tr>{td_price}</tr>")
 
     tbody = "\n".join(f"      {row}" for row in body_rows)
     return (
@@ -222,29 +259,32 @@ def iphone_label_cell(full_title: str) -> str:
     return t
 
 
-def parse_inventory_record_line(line: str) -> tuple[str, str, str] | None:
-    """1 行から (機種名, ランク, 在庫) を取り出す。形式: iPhone xxx、ランク：A+、在庫あり"""
+def parse_inventory_record_line(line: str) -> tuple[str, str, str, str, str] | None:
+    """1 行から (機種名, ランク, 在庫, 最小ストレージ表記, 価格表記) を取り出す。
+    旧形式 …、ランク：A+、在庫のみ も可（storage/price は空）。"""
     sep = "、ランク："
     if sep not in line:
         return None
     title, tail = line.split(sep, 1)
     title = title.strip()
-    parts = tail.split("、", 1)
-    if len(parts) != 2:
+    parts = tail.split("、")
+    if len(parts) < 2:
         return None
     rank_txt = parts[0].strip()
     stock = parts[1].strip()
+    storage = parts[2].strip() if len(parts) > 2 else ""
+    price = parts[3].strip() if len(parts) > 3 else ""
     if not title or not rank_txt or not stock:
         return None
-    return title, rank_txt, stock
+    return title, rank_txt, stock, storage, price
 
 
 def inventory_table_from_txt(raw: str) -> str | None:
     """
-    pivot 済みテーブル HTML を返す。
+    pivot 済みテーブル HTML を返す（機種ごとに在庫行・ストレージ行・価格行の3段）。
     pivot できる行が 1 件も無いときは None。
     """
-    grouped: OrderedDict[str, dict[str, str]] = OrderedDict()
+    grouped: OrderedDict[str, dict[str, dict[str, str]]] = OrderedDict()
 
     for line in raw.splitlines():
         t = line.strip()
@@ -253,12 +293,18 @@ def inventory_table_from_txt(raw: str) -> str | None:
         parsed = parse_inventory_record_line(t)
         if not parsed:
             continue
-        title, rank_txt, stock = parsed
+        title, rank_txt, stock, storage, price = parsed
         if rank_txt not in _RANK_KEYS:
             continue
         if title not in grouped:
-            grouped[title] = {k: "" for k in _RANK_KEYS}
-        grouped[title][rank_txt] = stock
+            grouped[title] = {
+                k: {"stock": "", "storage": "", "price": ""} for k in _RANK_KEYS
+            }
+        grouped[title][rank_txt] = {
+            "stock": stock,
+            "storage": storage,
+            "price": price,
+        }
 
     if not grouped:
         return None
@@ -271,25 +317,38 @@ def inventory_table_from_txt(raw: str) -> str | None:
         f'<tr><th scope="col">iPhone</th>{head_cells}</tr>'
     )
 
-    body_rows = []
+    body_rows: list[str] = []
     for full_title in grouped:
-        cells = grouped[full_title]
+        rank_cells = grouped[full_title]
         row_label = iphone_label_cell(full_title)
-        vals = []
+        vals_stock: list[str] = []
+        vals_storage: list[str] = []
+        vals_price: list[str] = []
         for key, _lbl in RANK_COLUMNS:
-            v = cells.get(key, "").strip()
-            vals.append(v if v else MISSING_STOCK_CELL)
-        td_parts = []
-        for val in vals:
-            css = inventory_stock_td_class(val)
-            td_parts.append(f'<td class="{css}">{html.escape(val)}</td>')
-        td_stock = "".join(td_parts)
-        body_rows.append(
-            '<tr>'
-            f'<th scope="row">{html.escape(row_label)}</th>'
-            f"{td_stock}"
-            '</tr>'
+            cell = rank_cells.get(key) or {}
+            st = (cell.get("stock") or "").strip()
+            su = (cell.get("storage") or "").strip()
+            pr = (cell.get("price") or "").strip()
+            vals_stock.append(st if st else MISSING_STOCK_CELL)
+            vals_storage.append(su if su else MISSING_STOCK_CELL)
+            vals_price.append(pr if pr else MISSING_STOCK_CELL)
+        td_stock = "".join(
+            f'<td class="{inventory_stock_td_class(v)}">{html.escape(v)}</td>'
+            for v in vals_stock
         )
+        td_storage = "".join(
+            f'<td class="inventory-meta">{html.escape(v)}</td>' for v in vals_storage
+        )
+        td_price = "".join(
+            f'<td class="inventory-meta">{html.escape(v)}</td>' for v in vals_price
+        )
+        body_rows.append(
+            "<tr>"
+            f'<th scope="row" rowspan="3">{html.escape(row_label)}</th>'
+            f"{td_stock}</tr>"
+        )
+        body_rows.append(f"<tr>{td_storage}</tr>")
+        body_rows.append(f"<tr>{td_price}</tr>")
 
     tbody = "\n".join(f"      {row}" for row in body_rows)
     table_inner = (
@@ -435,6 +494,12 @@ def shared_site_styles() -> str:
     .inventory-table td.stock-other {
       background: #fef9c3;
       color: #854d0e;
+    }
+    .inventory-table td.inventory-meta {
+      background: #f8fafc;
+      color: #334155;
+      font-size: 0.92em;
+      font-weight: 500;
     }
     .inventory-summary ul { margin: 0; padding-left: 1.35rem; }
     .inventory-summary li { margin-bottom: 0.2rem; }

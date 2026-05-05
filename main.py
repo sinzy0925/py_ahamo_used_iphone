@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -114,8 +115,63 @@ def _resolve_user_agent(cli_value: str | None) -> str:
     return stripped if stripped else DEFAULT_USER_AGENT
 
 
+def _used_term_storage_to_gb(value_txt: str, unit_txt: str) -> int:
+    """比較用に GB 換算（TB は 1024GB とみなす）。"""
+    digits = re.sub(r"[^\d]", "", value_txt)
+    v = int(digits) if digits else 0
+    u = unit_txt.strip().upper()
+    if u == "TB":
+        return v * 1024
+    return v
+
+
+def _used_term_price_to_int(amount_inner_text: str) -> int:
+    """「137,500」形式から整数円。"""
+    digits = re.sub(r"[^\d]", "", amount_inner_text)
+    return int(digits) if digits else 0
+
+
+def _pick_min_storage_min_price_option(
+    card, *, timeout_ms: int
+) -> tuple[str, str]:
+    """
+    カード内の a-device-price-thumbnail-radio から、
+    ストレージ容量が最小のSKUを選び、同容量で価格が最安のものを採用。
+    返り値: (「128GB」表示, 「137,500円～」表示)
+    """
+    to = int(timeout_ms)
+    labels = card.locator(".m-phone-thumbnail-card__body label.a-device-price-thumbnail-radio")
+    n = labels.count()
+    options: list[tuple[int, int, str, str]] = []
+    for j in range(n):
+        lab = labels.nth(j)
+        sv_loc = lab.locator(".a-device-price-thumbnail__storage-value")
+        if sv_loc.count() == 0:
+            continue
+        value_txt = sv_loc.first.inner_text(timeout=to).strip()
+        su_loc = lab.locator(".a-device-price-thumbnail__storage-unit")
+        unit_txt = su_loc.first.inner_text(timeout=to).strip() if su_loc.count() else "GB"
+        gb = _used_term_storage_to_gb(value_txt, unit_txt)
+        amt_loc = lab.locator(".a-device-price-thumbnail__price .a-price-amount span")
+        if amt_loc.count() == 0:
+            continue
+        price_raw = amt_loc.first.inner_text(timeout=to).strip()
+        price_i = _used_term_price_to_int(price_raw)
+        storage_disp = f"{value_txt}{unit_txt}"
+        price_disp = f"{price_raw}円～"
+        options.append((gb, price_i, storage_disp, price_disp))
+
+    if not options:
+        return "", ""
+
+    min_gb = min(o[0] for o in options)
+    tier = [o for o in options if o[0] == min_gb]
+    best = min(tier, key=lambda o: o[1])
+    return best[2], best[3]
+
+
 def scrape_used_term_inventory_summary(page: Page, *, timeout_ms: float) -> list[str]:
-    """m-phone-thumbnail-card 単位で【機種】【ランク】【在庫】の一覧行を組み立てる。"""
+    """m-phone-thumbnail-card 単位で【機種】【ランク】【在庫】【最小ストレージ】【最安支払総額～】の一覧行を組み立てる。"""
     to = int(timeout_ms)
     lines: list[str] = []
 
@@ -160,7 +216,8 @@ def scrape_used_term_inventory_summary(page: Page, *, timeout_ms: float) -> list
         else:
             stock = "不明"
 
-        lines.append(f"{title}、{rank_part}、{stock}")
+        storage_disp, price_disp = _pick_min_storage_min_price_option(c, timeout_ms=to)
+        lines.append(f"{title}、{rank_part}、{stock}、{storage_disp}、{price_disp}")
 
     return lines
 
@@ -184,8 +241,51 @@ def _stock_label_from_sale_flags(
     return "不明"
 
 
+def _new_iphone_price_label_to_gb_and_disp(label_text: str) -> tuple[int, str]:
+    """「256GBの場合」→ (比較用GB, 「256GB」表示)。パース不能なら大きいGBと原文。"""
+    t = re.sub(r"の場合\s*$", "", label_text.strip())
+    m = re.match(r"^(\d+)\s*(GB|TB)$", t.replace(" ", ""), re.I)
+    if m:
+        v = int(m.group(1))
+        u = m.group(2).upper()
+        gb = v * 1024 if u == "TB" else v
+        return gb, f"{v}{u}"
+    return 10**9, t
+
+
+def _pick_min_storage_price_from_new_iphone_card(card, *, timeout_ms: int) -> tuple[str, str]:
+    """
+    カード内の m-product-card-list__price-content ごとに容量・支払総額を拾い、
+    最小容量のうえで最安価の1件の (ストレージ表記, 価格表記) を返す。
+    """
+    to = int(timeout_ms)
+    blocks = card.locator(".m-product-card-list__figure .m-product-card-list__price-content")
+    n = blocks.count()
+    options: list[tuple[int, int, str, str]] = []
+    for i in range(n):
+        b = blocks.nth(i)
+        lbl_loc = b.locator(".m-product-card-list__price-label")
+        amt_loc = b.locator(".m-product-card-list__price .a-price-amount span").first
+        if lbl_loc.count() == 0 or amt_loc.count() == 0:
+            continue
+        raw_lbl = lbl_loc.first.inner_text(timeout=to).strip()
+        gb, storage_disp = _new_iphone_price_label_to_gb_and_disp(raw_lbl)
+        num_txt = amt_loc.inner_text(timeout=to).strip()
+        price_i = _used_term_price_to_int(num_txt)
+        price_disp = f"{num_txt}円"
+        options.append((gb, price_i, storage_disp, price_disp))
+
+    if not options:
+        return "", ""
+
+    min_gb = min(o[0] for o in options)
+    tier = [o for o in options if o[0] == min_gb]
+    best = min(tier, key=lambda o: o[1])
+    return best[2], best[3]
+
+
 def scrape_new_iphone_product_list_inventory(page: Page, *, timeout_ms: float) -> list[str]:
-    """m-product-card-list のカード単位で機種名と在庫を一覧化する。"""
+    """m-product-card-list のカード単位で機種・在庫・代表ストレージ・価格を一覧化（タブ区切り4列）。"""
     to = int(timeout_ms)
     lines: list[str] = []
 
@@ -205,7 +305,8 @@ def scrape_new_iphone_product_list_inventory(page: Page, *, timeout_ms: float) -
         name_loc = w.locator("p.m-product-card-list__name").first
         name = name_loc.inner_text(timeout=to).strip()
         stock = _stock_label_from_sale_flags(flag, variants)
-        lines.append(f"{name} {stock}")
+        storage_disp, price_disp = _pick_min_storage_price_from_new_iphone_card(w, timeout_ms=to)
+        lines.append(f"{name}\t{stock}\t{storage_disp}\t{price_disp}")
 
     return lines
 
