@@ -17,6 +17,8 @@ from pathlib import Path
 
 from playwright.sync_api import Page, sync_playwright
 
+from inventory_price_state import update_state_after_scrape
+
 USED_PRODUCTS_URL = "https://ahamo.com/products/used/"
 NEW_IPHONE_PRODUCTS_URL = "https://ahamo.com/products/iphone/"
 # 申込導線の各画面遷移後の待機（ミリ秒）— new-iphone フロー用
@@ -558,13 +560,20 @@ def main() -> int:
                 log_tag = "[新品iPhone一覧]"
 
             args.inventory_lines_file.parent.mkdir(parents=True, exist_ok=True)
-            args.inventory_lines_file.write_text(
-                "\n".join(inv_lines) + ("\n" if inv_lines else ""),
-                encoding="utf-8",
-            )
+            out_blob = "\n".join(inv_lines) + ("\n" if inv_lines else "")
+            args.inventory_lines_file.write_text(out_blob, encoding="utf-8")
             print(f"{log_tag} {len(inv_lines)} 件 → {args.inventory_lines_file.resolve()}")
             for line in inv_lines:
                 print(f"    {line}")
+
+            repo_root = args.inventory_lines_file.resolve().parent
+            try:
+                update_state_after_scrape(args.flow, out_blob, repo_root)
+            except Exception as exc:
+                print(
+                    f"[価格変動ステート] 更新に失敗しました: {exc}",
+                    file=sys.stderr,
+                )
 
             print("[スクショを撮る]")
 

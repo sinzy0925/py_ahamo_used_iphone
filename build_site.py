@@ -26,6 +26,12 @@ from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from inventory_price_state import (
+    load_state,
+    new_iphone_cell_changed_at,
+    used_cell_changed_at,
+)
+
 IMAGE_NAME = "used_term_select_full.png"
 NEW_IPHONE_IMAGE_NAME = "new_iphone_list_full.png"
 SCREENSHOT_CAPTION_NEW_IPHONE = "ahamo 新品iPhone 一覧ページのスクショ"
@@ -153,8 +159,13 @@ def ordered_new_iphone_row_keys(keys: set[str]) -> list[str]:
     return out
 
 
-def new_iphone_table_from_txt(raw: str) -> str | None:
-    """新品 iPhone 用 pivot テーブル HTML（在庫・ストレージ・価格の3段）。"""
+def _meta_td(value: str, *, extra_class: str = "") -> str:
+    cls = "inventory-meta" + (f" {extra_class}" if extra_class else "")
+    return f'<td class="{cls}">{html.escape(value)}</td>'
+
+
+def new_iphone_table_from_txt(raw: str, state: dict | None = None) -> str | None:
+    """新品 iPhone 用 pivot テーブル HTML（在庫・ストレージ・価格・価格変動の4段）。"""
     grid: dict[str, dict[str, dict[str, str]]] = {}
     for line in raw.splitlines():
         parsed = parse_new_iphone_inventory_line(line.strip())
@@ -206,16 +217,32 @@ def new_iphone_table_from_txt(raw: str) -> str | None:
         td_storage = "".join(
             f'<td class="inventory-meta">{html.escape(v)}</td>' for v in vals_storage
         )
-        td_price = "".join(
-            f'<td class="inventory-meta">{html.escape(v)}</td>' for v in vals_price
-        )
+        td_price_parts: list[str] = []
+        td_change_parts: list[str] = []
+        for j, col_k in enumerate(c for c, _ in NEW_IPHONE_COLUMNS):
+            pr = vals_price[j]
+            ch_at = (
+                new_iphone_cell_changed_at(state or {}, row_k, col_k)
+                if state
+                else None
+            )
+            p_extra = "price-change-highlight" if ch_at else ""
+            td_price_parts.append(_meta_td(pr, extra_class=p_extra))
+            d_extra = "price-change-date" if ch_at else ""
+            d_val = ch_at if ch_at else NEW_IPHONE_EMPTY_CELL
+            td_change_parts.append(_meta_td(d_val, extra_class=d_extra))
+        td_price = "".join(td_price_parts)
+        td_change = "".join(td_change_parts)
         body_rows.append(
             "<tr>"
-            f'<th scope="row" rowspan="3">{html.escape(row_title)}</th>'
+            f'<th scope="row" rowspan="4">{html.escape(row_title)}</th>'
             f"{td_stock}</tr>"
         )
         body_rows.append(f"<tr>{td_storage}</tr>")
         body_rows.append(f"<tr>{td_price}</tr>")
+        body_rows.append(
+            f'<tr><th scope="row">{html.escape("価格変動")}</th>{td_change}</tr>'
+        )
 
     tbody = "\n".join(f"      {row}" for row in body_rows)
     return (
@@ -238,7 +265,8 @@ def new_iphone_inventory_section_html(repo_root: Path) -> str:
     raw = path.read_text(encoding="utf-8").strip()
     if not raw:
         return ""
-    table_inner = new_iphone_table_from_txt(raw)
+    st = load_state(repo_root)
+    table_inner = new_iphone_table_from_txt(raw, st)
     if not table_inner:
         return ""
     return (
@@ -279,7 +307,7 @@ def parse_inventory_record_line(line: str) -> tuple[str, str, str, str, str] | N
     return title, rank_txt, stock, storage, price
 
 
-def inventory_table_from_txt(raw: str) -> str | None:
+def inventory_table_from_txt(raw: str, state: dict | None = None) -> str | None:
     """
     pivot 済みテーブル HTML を返す（機種ごとに在庫行・ストレージ行・価格行の3段）。
     pivot できる行が 1 件も無いときは None。
@@ -339,16 +367,30 @@ def inventory_table_from_txt(raw: str) -> str | None:
         td_storage = "".join(
             f'<td class="inventory-meta">{html.escape(v)}</td>' for v in vals_storage
         )
-        td_price = "".join(
-            f'<td class="inventory-meta">{html.escape(v)}</td>' for v in vals_price
-        )
+        td_price_parts: list[str] = []
+        td_change_parts: list[str] = []
+        for j, rk in enumerate(c for c, _ in RANK_COLUMNS):
+            pr = vals_price[j]
+            ch_at = (
+                used_cell_changed_at(state or {}, full_title, rk) if state else None
+            )
+            p_extra = "price-change-highlight" if ch_at else ""
+            td_price_parts.append(_meta_td(pr, extra_class=p_extra))
+            d_extra = "price-change-date" if ch_at else ""
+            d_val = ch_at if ch_at else MISSING_STOCK_CELL
+            td_change_parts.append(_meta_td(d_val, extra_class=d_extra))
+        td_price = "".join(td_price_parts)
+        td_change = "".join(td_change_parts)
         body_rows.append(
             "<tr>"
-            f'<th scope="row" rowspan="3">{html.escape(row_label)}</th>'
+            f'<th scope="row" rowspan="4">{html.escape(row_label)}</th>'
             f"{td_stock}</tr>"
         )
         body_rows.append(f"<tr>{td_storage}</tr>")
         body_rows.append(f"<tr>{td_price}</tr>")
+        body_rows.append(
+            f'<tr><th scope="row">{html.escape("価格変動")}</th>{td_change}</tr>'
+        )
 
     tbody = "\n".join(f"      {row}" for row in body_rows)
     table_inner = (
@@ -373,7 +415,8 @@ def inventory_summary_html(repo_root: Path) -> str:
     if not raw:
         return ""
 
-    table_inner = inventory_table_from_txt(raw)
+    st = load_state(repo_root)
+    table_inner = inventory_table_from_txt(raw, st)
     if table_inner is not None:
         return (
             '  <section class="inventory-summary" aria-labelledby="inv-h">\n'
@@ -500,6 +543,17 @@ def shared_site_styles() -> str:
       color: #334155;
       font-size: 0.92em;
       font-weight: 500;
+    }
+    .inventory-table td.inventory-meta.price-change-highlight {
+      background: #ecfdf5;
+      color: #15803d;
+      font-weight: 700;
+      box-shadow: inset 0 0 0 1px rgba(22,163,74,0.35);
+    }
+    .inventory-table td.inventory-meta.price-change-date {
+      background: #ecfdf5;
+      color: #15803d;
+      font-weight: 700;
     }
     .inventory-summary ul { margin: 0; padding-left: 1.35rem; }
     .inventory-summary li { margin-bottom: 0.2rem; }

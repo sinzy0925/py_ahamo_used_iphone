@@ -24,6 +24,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 価格変動日の永続化（ジョブ間）。リポジトリに JSON をコミットしない場合でも CI で引き継げる。
+      - uses: actions/cache@v4
+        with:
+          path: inventory_price_state.json
+          key: ${{ runner.os }}-ahamo-inventory-price-state-v1
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
