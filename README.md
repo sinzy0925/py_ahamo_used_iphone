@@ -97,3 +97,4 @@ python -m venv .venv
 ## ライセンス
 
 このリポジトリのソースコードは **[MIT License](LICENSE)** で公開されています。
+
