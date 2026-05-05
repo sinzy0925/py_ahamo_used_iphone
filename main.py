@@ -137,7 +137,7 @@ def _pick_min_storage_min_price_option(
     """
     カード内の a-device-price-thumbnail-radio から、
     ストレージ容量が最小のSKUを選び、同容量で価格が最安のものを採用。
-    返り値: (「128GB」表示, 「137,500円～」表示)
+    返り値: (「128GB」表示, 「137,500円」表示)
     """
     to = int(timeout_ms)
     labels = card.locator(".m-phone-thumbnail-card__body label.a-device-price-thumbnail-radio")
@@ -158,7 +158,7 @@ def _pick_min_storage_min_price_option(
         price_raw = amt_loc.first.inner_text(timeout=to).strip()
         price_i = _used_term_price_to_int(price_raw)
         storage_disp = f"{value_txt}{unit_txt}"
-        price_disp = f"{price_raw}円～"
+        price_disp = f"{price_raw}円"
         options.append((gb, price_i, storage_disp, price_disp))
 
     if not options:
@@ -171,7 +171,7 @@ def _pick_min_storage_min_price_option(
 
 
 def scrape_used_term_inventory_summary(page: Page, *, timeout_ms: float) -> list[str]:
-    """m-phone-thumbnail-card 単位で【機種】【ランク】【在庫】【最小ストレージ】【最安支払総額～】の一覧行を組み立てる。"""
+    """m-phone-thumbnail-card 単位で【機種】【ランク】【在庫】【最小ストレージ】【最安支払総額】の一覧行を組み立てる。"""
     to = int(timeout_ms)
     lines: list[str] = []
 
