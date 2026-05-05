@@ -235,7 +235,7 @@ def new_iphone_table_from_txt(raw: str, state: dict | None = None) -> str | None
         td_change = "".join(td_change_parts)
         body_rows.append(
             "<tr>"
-            f'<th scope="row" rowspan="4">{html.escape(row_title)}</th>'
+            f'<th scope="row" rowspan="3">{html.escape(row_title)}</th>'
             f"{td_stock}</tr>"
         )
         body_rows.append(f"<tr>{td_storage}</tr>")
@@ -383,7 +383,7 @@ def inventory_table_from_txt(raw: str, state: dict | None = None) -> str | None:
         td_change = "".join(td_change_parts)
         body_rows.append(
             "<tr>"
-            f'<th scope="row" rowspan="4">{html.escape(row_label)}</th>'
+            f'<th scope="row" rowspan="3">{html.escape(row_label)}</th>'
             f"{td_stock}</tr>"
         )
         body_rows.append(f"<tr>{td_storage}</tr>")
